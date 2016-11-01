@@ -7,9 +7,7 @@ use std::thread;
 use std::collections::HashMap;
 use std::str;
 use std::fs::File;
-use std::fmt::Arguments;
-use std::borrow;
-use std::borrow::*;
+use std::borrow::Cow;
 use std::ops::Deref;
 
 mod logger;
