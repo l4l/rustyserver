@@ -12,9 +12,9 @@ use std::ops::Deref;
 
 type Map<T> = Option<HashMap<T, T>>;
 
-const RESP404: &'static str = "HTTP/1.1 404 Not Found\r\n\r\n";
-const RESP520: &'static str = "HTTP/1.1 520 Unknown Error\r\n\r\n";
-const RESP200: &'static str = "HTTP/1.1 200\n";
+const RESP404: &'static [u8; 26] = b"HTTP/1.1 404 Not Found\r\n\r\n";
+const RESP520: &'static [u8; 30] = b"HTTP/1.1 520 Unknown Error\r\n\r\n";
+const RESP200: &'static [u8; 13] = b"HTTP/1.1 200\n";
 
 macro_rules! log {
     ($fmt:expr) => (
@@ -126,7 +126,7 @@ fn parse<'a>(buf: &'a [u8]) -> (Request, Http<'a>) {
     (req, http)
 }
 
-fn handle_get<'a>(http: &Http) -> Result<Cow<'a, str>, HttpError> {
+fn handle_get<'a>(http: &Http) -> Result<Cow<'a, [u8]>, HttpError> {
     let mut path: String = String::from("www");
     path.push_str(http.path);
     let mut meta = if let Ok(m) = fs::metadata(&path) {
@@ -155,27 +155,27 @@ fn handle_get<'a>(http: &Http) -> Result<Cow<'a, str>, HttpError> {
                 }
             }
         }
-
-        Ok(Cow::Owned(s))
+        let b: Vec<u8> = s.into_bytes();
+        Ok(Cow::Owned(b))
     } else if meta.is_file() {
         let mut f = File::open(path).unwrap();
-        let mut buf: String = String::new();
-        let _ = f.read_to_string(&mut buf).unwrap();
+        let mut buf: Vec<u8> = Vec::new();
+        let _ = f.read_to_end(&mut buf).unwrap();
         Ok(Cow::Owned(buf))
     } else {
         Err(HttpError::NotFound)
     };
 }
 
-fn handle_post<'a>(http: &Http) -> Result<Cow<'a, str>, HttpError> {
+fn handle_post<'a>(http: &Http) -> Result<Cow<'a, [u8]>, HttpError> {
     if let Some(ref h) = http.headers {
         if let Some(&pass) = h.get("Auth") {
             // should be pretty secure
             if http.path == "/flag" && pass == "OylFIrcuIk8KN1sJCEADaDFd7fi4TmKz" {
                 let mut f = File::open("the flag").unwrap();
-                let mut s = String::new();
-                let _ = f.read_to_string(&mut s).unwrap();
-                return Ok(Cow::Owned(format!("{}", s)));
+                let mut buf: Vec<u8> = Vec::new();
+                let _ = f.read_to_end(&mut buf).unwrap();
+                return Ok(Cow::Owned(buf));
             }
         }
     }
@@ -199,13 +199,13 @@ fn handle(mut stream: TcpStream) {
     };
 
     let (msg, header_len) = match responce {
-        Ok(msg) => (msg, stream.write(RESP200.as_bytes())),
+        Ok(msg) => (msg, stream.write(RESP200)),
         Err(e) => {
             match e {
                 HttpError::NotFound => {
-                    (Cow::Borrowed("Not found"), stream.write(RESP404.as_bytes()))
+                    (Cow::from(b"Not found" as &'static [u8]), stream.write(RESP404))
                 }
-                _ => (Cow::Borrowed("Unknown"), stream.write(RESP520.as_bytes())),
+                _ => (Cow::from(b"Unknown" as &'static [u8]), stream.write(RESP520)),
             }
         }
     };
@@ -213,7 +213,7 @@ fn handle(mut stream: TcpStream) {
     if let (Ok(header_len), Ok(content_len), Ok(body_len)) =
            (header_len,
             stream.write(format!("Content-Length: {}\r\n\r\n", msg.len()).as_bytes()),
-            stream.write(msg.deref().as_bytes())) {
+            stream.write(msg.deref())) {
         log!("Sent {} bytes", header_len + content_len + body_len);
     } else {
         log!("Error in responcing");
