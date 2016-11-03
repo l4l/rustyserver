@@ -1,5 +1,4 @@
-#[macro_use]
-extern crate log;
+extern crate time;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -11,13 +10,20 @@ use std::fs::File;
 use std::borrow::Cow;
 use std::ops::Deref;
 
-mod logger;
-
 type Map<T> = Option<HashMap<T, T>>;
 
 const RESP404: &'static str = "HTTP/1.1 404 Not Found\r\n\r\n";
 const RESP520: &'static str = "HTTP/1.1 520 Unknown Error\r\n\r\n";
 const RESP200: &'static str = "HTTP/1.1 200\n";
+
+macro_rules! log {
+    ($fmt:expr) => (
+        print!("{}: ", time::now().ctime()); print!(concat!($fmt, "\n"))
+    );
+    ($fmt:expr, $($arg:tt)*) => (
+        print!("{}: ", time::now().ctime()); print!(concat!($fmt, "\n"), $($arg)*)
+    );
+}
 
 #[derive(Debug)]
 enum Request {
@@ -50,22 +56,21 @@ enum HttpError {
 }
 
 fn main() {
-    let _ = logger::init();
     let listener = TcpListener::bind("0.0.0.0:8765").unwrap();
 
     for l in listener.incoming() {
         match l {
             Ok(stream) => {
-                info!("connection from {} to {}",
-                      stream.peer_addr().unwrap().to_string(),
-                      stream.local_addr().unwrap().to_string());
+                log!("connection from {} to {}",
+                     stream.peer_addr().unwrap().to_string(),
+                     stream.local_addr().unwrap().to_string());
 
                 thread::spawn(move || {
                     handle(stream);
                 });
             }
             Err(e) => {
-                warn!("{:?}", e.to_string());
+                log!("{:?}", e.to_string());
             }
         }
     }
@@ -92,7 +97,7 @@ fn parse_headers_and_body<'a>(s: &'a str) -> (Map<&'a str>, &'a str) {
     for line in s.lines() {
         let v: Vec<&str> = line.splitn(2, ": ").collect();
         if v.len() != 2 {
-            // debug!("{:?}", v);
+            // log!(v);
         } else {
             dict.insert(v[0], v[1]);
         }
@@ -183,11 +188,11 @@ fn handle(mut stream: TcpStream) {
     let (request, http) = parse(&buf);
     let responce = match request {
         Request::Get => {
-            info!("GET {}", http.path);
+            log!("GET {}", http.path);
             handle_get(&http)
         }
         Request::Post => {
-            info!("POST {}", http.path);
+            log!("POST {}", http.path);
             handle_post(&http)
         }
         Request::Undefined => Err(HttpError::NotFound),
@@ -209,8 +214,8 @@ fn handle(mut stream: TcpStream) {
            (header_len,
             stream.write(format!("Content-Length: {}\r\n\r\n", msg.len()).as_bytes()),
             stream.write(msg.deref().as_bytes())) {
-        info!("Sent {} bytes", header_len + content_len + body_len);
+        log!("Sent {} bytes", header_len + content_len + body_len);
     } else {
-        warn!("Error in responcing");
+        log!("Error in responcing");
     }
 }

@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["Kitsu <mail@kitsu.me>"]
 
 [dependencies]
-log = "0.3.6"
+time = "0.1"
